@@ -1,0 +1,85 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install k6
+        run: |
+          sudo gpg -k
+          sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update
+          sudo apt-get install k6
+      - name: Run Posts load test
+        run: k6 run tests/posts.js
+      - name: Run Users load test
+        run: k6 run tests/users.js
+      - name: Run Full scenario load test
+        run: k6 run tests/full-scenario.js
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: k6-results
+          path: reports/
+
+  report:
+    runs-on: ubuntu-latest
+    needs: test
+    if: always()
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download test results
+        uses: actions/download-artifact@v4
+        with:
+          name: k6-results
+          path: reports/
+      - name: Generate summary
+        run: |
+          echo "# k6 Performance Test Results" > report/summary.md
+          echo "" >> report/summary.md
+          echo "## Test Run: $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> report/summary.md
+          echo "" >> report/summary.md
+          for f in reports/*.json; do
+            if [ -f "$f" ]; then
+              name=$(basename "$f" .json | sed 's/-summary//')
+              echo "### $name" >> report/summary.md
+              echo '```json' >> report/summary.md
+              cat "$f" >> report/summary.md
+              echo '```' >> report/summary.md
+              echo "" >> report/summary.md
+            fi
+          done
+      - name: Upload Pages artifact
+        if: always()
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: report/
+
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: report
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

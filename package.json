@@ -1,0 +1,13 @@
+{
+  "name": "k6-performance-testing",
+  "version": "1.0.0",
+  "description": "Performance testing with k6 and GitHub Actions",
+  "scripts": {
+    "test:posts": "k6 run tests/posts.js",
+    "test:users": "k6 run tests/users.js",
+    "test:full": "k6 run tests/full-scenario.js",
+    "test:all": "k6 run tests/posts.js && k6 run tests/users.js && k6 run tests/full-scenario.js"
+  },
+  "keywords": ["k6", "performance", "load-testing", "github-actions"],
+  "license": "MIT"
+}
